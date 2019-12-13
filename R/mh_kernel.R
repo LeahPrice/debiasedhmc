@@ -8,29 +8,39 @@
 #'@param logtarget function to compute target log-density, e.g. see \code{\link{get_mvnormal}}
 #'@param Sigma_proposal variance of the Normal random walk for the proposals
 #'@param dimension dimension of the target distribution
+#'@param gradlogtarget function to compute gradient of target log-density, e.g. see \code{\link{get_mvnormal}}
 #'@return A list containing the keys
 #' \code{single_kernel}, \code{coupled_kernel}.
 #'@export
-get_mh_kernel <- function(logtarget, Sigma_proposal, dimension){
+get_mh_kernel <- function(logtarget, Sigma_proposal, dimension, gradlogtarget = NULL){
   proposal_std <- sqrt(diag(Sigma_proposal))
   Sigma1_chol <- diag(proposal_std, dimension, dimension)
   Sigma1_chol_inv <- diag(1 / proposal_std, dimension, dimension)
   zeromean <- rep(0, dimension)
 
   # single kernel
-  kernel <- function(chain_state, current_pdf, iteration){
+  kernel <- function(chain_state, current_pdf, iteration, chain_grad){
     proposal_value <- chain_state + fast_rmvnorm_chol(1, zeromean, Sigma1_chol)[1,]
     proposal_pdf <- logtarget(proposal_value)
     accept <- (log(runif(1)) < (proposal_pdf - current_pdf))
-    if (accept){
-      return(list(chain_state = proposal_value, current_pdf = proposal_pdf, accept = accept))
-    } else {
-      return(list(chain_state = chain_state, current_pdf = current_pdf, accept = accept))
+    if (is.null(gradlogtarget)){
+      if (accept){
+        return(list(chain_state = proposal_value, current_pdf = proposal_pdf, accept = accept, chain_grad = NULL))
+      } else {
+        return(list(chain_state = chain_state, current_pdf = current_pdf, accept = accept, chain_grad = NULL))
+      }
+    } else{
+      proposal_grad<- gradlogtarget(proposal_value)
+      if (accept){
+        return(list(chain_state = proposal_value, current_pdf = proposal_pdf, accept = accept, chain_grad = proposal_grad))
+      } else {
+        return(list(chain_state = chain_state, current_pdf = current_pdf, accept = accept, chain_grad = chain_grad))
+      }
     }
   }
 
   # coupled kernel
-  coupled_kernel <- function(chain_state1, chain_state2, current_pdf1, current_pdf2, iteration){
+  coupled_kernel <- function(chain_state1, chain_state2, current_pdf1, current_pdf2, iteration, chain_grad1, chain_grad2){
     # sample from maximal coupling
     proposal_value <- gaussian_max_coupling_cholesky_R(chain_state1, chain_state2,
                                                        Sigma1_chol, Sigma1_chol,
@@ -53,14 +63,34 @@ get_mh_kernel <- function(logtarget, Sigma_proposal, dimension){
     if (accept1){
       chain_state1 <- proposal1
       current_pdf1 <- proposal_pdf1
+      if (is.null(gradlogtarget)==FALSE){
+        chain_grad1 <- gradlogtarget(proposal1)
+      } else {
+        chain_grad1 <- NULL
+      }
     }
     if (accept2){
       chain_state2 <- proposal2
       current_pdf2 <- proposal_pdf2
+      if (is.null(gradlogtarget)==FALSE){
+        chain_grad2 <- gradlogtarget(proposal2)
+      } else {
+        chain_grad2 <- NULL
+      }
     }
-    return(list(chain_state1 = chain_state1, chain_state2 = chain_state2,
-                current_pdf1 = current_pdf1, current_pdf2 = current_pdf2,
-                accept1 = accept1, accept2 = accept2))
+    if (is.null(gradlogtarget)){
+      return(list(chain_state1 = chain_state1, chain_state2 = chain_state2,
+                  current_pdf1 = current_pdf1, current_pdf2 = current_pdf2,
+                  accept1 = accept1, accept2 = accept2,
+                  chain_grad1 = NULL, chain_grad2 = NULL))
+    } else{
+
+      return(list(chain_state1 = chain_state1, chain_state2 = chain_state2,
+                  current_pdf1 = current_pdf1, current_pdf2 = current_pdf2,
+                  accept1 = accept1, accept2 = accept2,
+                  chain_grad1 = chain_grad1, chain_grad2 = chain_grad2))
+
+    }
   }
 
   return(list(kernel = kernel, coupled_kernel = coupled_kernel))

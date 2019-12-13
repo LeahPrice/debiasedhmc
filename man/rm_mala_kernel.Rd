@@ -5,8 +5,8 @@
 \title{Get Riemann manifold coupled Metropolis adjusted Langevin algorithm (MALA) kernels
 that switches between synchrous coupling and maximal coupling}
 \usage{
-get_rm_mala_kernel(logtarget, gradlogtarget, stepsize, dimension, adaptive_tol,
-  metric)
+get_rm_mala_kernel(logtarget, gradlogtarget, stepsize, dimension,
+  adaptive_tol, metric)
 }
 \arguments{
 \item{logtarget}{function to compute target log-density, e.g. see \code{\link{get_mvnormal}}}

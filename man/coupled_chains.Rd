@@ -5,7 +5,7 @@
 \title{Coupled MCMC chains}
 \usage{
 coupled_chains(logtarget, single_kernel, coupled_kernel, rinit, m = 1,
-  max_iterations = Inf, preallocate = 10)
+  max_iterations = Inf, preallocate = 10, gradlogtarget = NULL)
 }
 \arguments{
 \item{logtarget}{function evaluating the log target density}
@@ -24,6 +24,8 @@ default to 1).}
 \item{max_iterations}{number of iterations at which the function stops if it is still running  (default to Inf).}
 
 \item{preallocate}{expected number of iterations, used to pre-allocate memory (default to 10).}
+
+\item{gradlogtarget}{function to compute gradient of target log-density}
 }
 \description{
 Sample two MCMC chains, each following \code{single_kernel} marginally,

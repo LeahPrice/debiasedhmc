@@ -5,7 +5,8 @@
 \title{Unbiased estimator}
 \usage{
 unbiased_estimator(logtarget, single_kernel, coupled_kernel, rinit,
-  h = function(x) x, k = 0, m = 1, max_iterations = Inf)
+  h = function(x) x, k = 0, m = 1, max_iterations = Inf,
+  gradlogtarget = NULL)
 }
 \arguments{
 \item{logtarget}{function evaluating the log target density}
@@ -26,6 +27,8 @@ and returning a list with keys \code{chain_state1}, \code{chain_state2}, \code{c
 default to 1).}
 
 \item{max_iterations}{number of iterations at which the function stops if it is still running  (default to Inf).}
+
+\item{gradlogtarget}{function to compute gradient of target log-density}
 }
 \description{
 Sample two MCMC chains, each following \code{single_kernel} marginally,

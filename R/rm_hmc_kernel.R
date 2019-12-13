@@ -25,13 +25,14 @@ get_rm_hmc_kernel <- function(logtarget, gradlogtarget, stepsize, nsteps, dimens
         v <- v + stepsize * gradlogtarget(x)
       }
     }
-    v <- v + stepsize * gradlogtarget(x) / 2
+    gradx <- gradlogtarget(x)
+    v <- v + stepsize * gradx / 2
     # we could negate the momentum but we don't use it here
-    return(list(x = x, v = v))
+    return(list(x = x, v = v, gradx = gradx))
   }
 
   # One step of RM-HMC
-  kernel <- function(chain_state, current_pdf, iteration){
+  kernel <- function(chain_state, current_pdf, iteration, chain_grad = NULL){
     current_v <- as.numeric(metric$inverse_chol_inverse %*% rnorm(dimension)) # velocity or momentum
     leapfrog_result <- leapfrog(chain_state, current_v)
     proposed_v <- - leapfrog_result$v
@@ -47,14 +48,17 @@ get_rm_hmc_kernel <- function(logtarget, gradlogtarget, stepsize, nsteps, dimens
       chain_state <- proposed_x
       current_v <- proposed_v
       current_pdf <- proposed_pdf
+      if (!is.null(chain_grad)){
+        chain_grad <- leapfrog_result$gradx
+      }
       accept <- TRUE
     } else {
     }
-    return(list(chain_state = chain_state, current_pdf = current_pdf, accept = accept))
+    return(list(chain_state = chain_state, current_pdf = current_pdf, accept = accept, chain_grad = chain_grad))
   }
 
   # One step of coupled RM-HMC
-  coupled_kernel <- function(chain_state1, chain_state2, current_pdf1, current_pdf2, iteration){
+  coupled_kernel <- function(chain_state1, chain_state2, current_pdf1, current_pdf2, iteration, chain_grad1 = NULL, chain_grad2 = NULL){
     current_v <- as.numeric(metric$inverse_chol_inverse %*% rnorm(dimension)) # velocity or momentum, shared by both chains
     leapfrog_result1 <- leapfrog(chain_state1, current_v)
     leapfrog_result2 <- leapfrog(chain_state2, current_v)
@@ -77,13 +81,20 @@ get_rm_hmc_kernel <- function(logtarget, gradlogtarget, stepsize, nsteps, dimens
     if (logu < accept_ratio1){
       chain_state1 <- proposed_x1
       current_pdf1 <- proposed_pdf1
+      if (!is.null(chain_grad1)){
+        chain_grad1 <- leapfrog_result1$gradx
+      }
     }
     if (logu < accept_ratio2){
       chain_state2 <- proposed_x2
       current_pdf2 <- proposed_pdf2
+      if (!is.null(chain_grad1)){
+        chain_grad2 <- leapfrog_result2$gradx
+      }
     }
     return(list(chain_state1 = chain_state1, chain_state2 = chain_state2,
-                current_pdf1 = current_pdf1, current_pdf2 = current_pdf2))
+                current_pdf1 = current_pdf1, current_pdf2 = current_pdf2,
+                chain_grad1 = chain_grad1, chain_grad2 = chain_grad2))
   }
 
   return(list(kernel = kernel, coupled_kernel = coupled_kernel))

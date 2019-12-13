@@ -5,7 +5,8 @@
 \title{Get adaptive coupled Metropolis adjusted Langevin algorithm (MALA) kernels
 that switches between synchrous coupling and maximal coupling}
 \usage{
-get_mala_kernel(logtarget, gradlogtarget, stepsize, dimension, adaptive_tol)
+get_mala_kernel(logtarget, gradlogtarget, stepsize, dimension,
+  adaptive_tol)
 }
 \arguments{
 \item{logtarget}{function to compute target log-density, e.g. see \code{\link{get_mvnormal}}}

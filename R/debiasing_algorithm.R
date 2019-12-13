@@ -22,14 +22,21 @@
 #' default to 1).
 #'@param max_iterations number of iterations at which the function stops if it is still running  (default to Inf).
 #'@param preallocate  expected number of iterations, used to pre-allocate memory (default to 10).
+#'@param gradlogtarget function to compute gradient of target log-density
 #'@export
-coupled_chains <- function(logtarget, single_kernel, coupled_kernel, rinit, m = 1, max_iterations = Inf, preallocate = 10){
+coupled_chains <- function(logtarget, single_kernel, coupled_kernel, rinit, m = 1, max_iterations = Inf, preallocate = 10, gradlogtarget = NULL){
   # keep track of stuff
   # initialize
   chain_state1 <- rinit()
   chain_state2 <- rinit()
   current_pdf1 <- logtarget(chain_state1)
   current_pdf2 <- logtarget(chain_state2)
+  if (!is.null(gradlogtarget)){
+    chain_grad1 <- gradlogtarget(chain_state1)
+    chain_grad2 <- gradlogtarget(chain_state2)
+  } else{
+    chain_grad1 <- chain_grad2 <- NULL
+  }
 
   # pre-allocate
   p <- length(chain_state1)
@@ -45,6 +52,7 @@ coupled_chains <- function(logtarget, single_kernel, coupled_kernel, rinit, m = 
   res_single_kernel <- single_kernel(chain_state1, current_pdf1, iter)
   chain_state1 <- res_single_kernel$chain_state
   current_pdf1 <- res_single_kernel$current_pdf
+  chain_grad1 <- res_single_kernel$chain_grad
   current_nsamples1 <- current_nsamples1 + 1
   samples1[current_nsamples1,] <- chain_state1
 
@@ -56,18 +64,22 @@ coupled_chains <- function(logtarget, single_kernel, coupled_kernel, rinit, m = 
     iter <- iter + 1
     if (meet){
       # only need to use single kernel after meeting
-      res_single_kernel <- single_kernel(chain_state1, current_pdf1, iter)
+      res_single_kernel <- single_kernel(chain_state1, current_pdf1, iter, chain_grad1)
       chain_state1 <- res_single_kernel$chain_state
       current_pdf1 <- res_single_kernel$current_pdf
+      chain_grad1 <- res_single_kernel$chain_grad
       chain_state2 <- chain_state1
       current_pdf2 <- current_pdf1
+      chain_grad2 <- chain_grad1
     } else {
       # use coupled kernel
-      res_coupled_kernel <- coupled_kernel(chain_state1, chain_state2, current_pdf1, current_pdf2, iter)
+      res_coupled_kernel <- coupled_kernel(chain_state1, chain_state2, current_pdf1, current_pdf2, iter, chain_grad1, chain_grad2)
       chain_state1 <- res_coupled_kernel$chain_state1
       chain_state2 <- res_coupled_kernel$chain_state2
       current_pdf1 <- res_coupled_kernel$current_pdf1
       current_pdf2 <- res_coupled_kernel$current_pdf2
+      chain_grad1 <- res_coupled_kernel$chain_grad1
+      chain_grad2 <- res_coupled_kernel$chain_grad2
 
       # check if meeting happens
       if (all(chain_state1 == chain_state2) && !meet){
@@ -167,36 +179,75 @@ H_bar <- function(c_chains, h = function(x) x, k = 0, m = 1){
 #'@param m time average parameter (will be proportional to the computing cost if meeting occurs before \code{m},
 #' default to 1).
 #'@param max_iterations number of iterations at which the function stops if it is still running  (default to Inf).
+#'@param gradlogtarget function to compute gradient of target log-density
 #'@export
-unbiased_estimator <- function(logtarget, single_kernel, coupled_kernel, rinit, h = function(x) x, k = 0, m = 1, max_iterations = Inf){
+unbiased_estimator <- function(logtarget, single_kernel, coupled_kernel, rinit, h = function(x) x, k = 0, m = 1, max_iterations = Inf, gradlogtarget = NULL){
   # initialize
   chain_state1 <- rinit()
   chain_state2 <- rinit()
   current_pdf1 <- logtarget(chain_state1)
   current_pdf2 <- logtarget(chain_state2)
+  if (!is.null(gradlogtarget)){
+    chain_grad1 <- gradlogtarget(chain_state1)
+    chain_grad2 <- gradlogtarget(chain_state2)
+  } else{
+    chain_grad1 <- chain_grad2 <- NULL
+  }
 
   # mcmcestimator computes the sum of h(X_t) for t=k,...,m
   mcmcestimator <- h(chain_state1)
+  samples <- NULL
+  gradients <- NULL
+  fun_evals <- NULL
+  weights <- NULL
+  mcmc_ind <- NULL
+  chain <- NULL
   dimh <- length(mcmcestimator)
   if (k > 0){
     mcmcestimator <- rep(0, dimh)
+  } else{
+    samples <- rbind(samples,chain_state1)
+    gradients <- rbind(gradients,chain_grad1)
+    fun_evals <- rbind(fun_evals,h(chain_state1))
+    weights <- c(weights,1 / (m - k + 1))
+    mcmc_ind <- c(mcmc_ind,TRUE)
+    chain <- c(chain,"x")
   }
 
   # move first chain
   iter <- 1
-  res_single_kernel <- single_kernel(chain_state1, current_pdf1, iter)
+  res_single_kernel <- single_kernel(chain_state1, current_pdf1, iter, chain_grad1)
   chain_state1 <- res_single_kernel$chain_state
   current_pdf1 <- res_single_kernel$current_pdf
+  chain_grad1 <- res_single_kernel$chain_grad
 
   # correction term computes the sum of min(1, (t - k + 1) / (m - k + 1)) * (h(X_{t+1}) - h(X_t)) for t=k,...,max(m, tau - 1)
   correction <- rep(0, dimh)
   if (k == 0){
     correction <- correction + min(1, (0 - k + 1)/(m - k + 1) )  * ( h(chain_state1) - h(chain_state2) )
+    samples <- rbind(samples,chain_state2)
+    gradients <- rbind(gradients,chain_grad2)
+    fun_evals <- rbind(fun_evals,h(chain_state2))
+    weights <- c(weights, - min(1, (0 - k + 1)/(m - k + 1) ))
+    mcmc_ind <- c(mcmc_ind,FALSE)
+    chain <- c(chain,"y")
+    samples <- rbind(samples,chain_state1)
+    gradients <- rbind(gradients,chain_grad1)
+    fun_evals <- rbind(fun_evals,h(chain_state1))
+    weights <- c(weights,min(1, (0 - k + 1)/(m - k + 1) ))
+    mcmc_ind <- c(mcmc_ind,FALSE)
+    chain <- c(chain,"x")
   }
+
+
 
   # accumulate mcmc estimator
   if (k <= 1 && m >= 1){
     mcmcestimator <- mcmcestimator + h(chain_state1)
+    if (k==0){
+      weights[length(weights)] <- weights[length(weights)] + 1 / (m - k + 1)
+      mcmc_ind[length(mcmc_ind)] <- TRUE
+    }
   }
 
   # iterate
@@ -208,24 +259,34 @@ unbiased_estimator <- function(logtarget, single_kernel, coupled_kernel, rinit, 
     iter <- iter + 1
     if (meet){
       # only need to use single kernel after meeting
-      res_single_kernel <- single_kernel(chain_state1, current_pdf1, iter)
+      res_single_kernel <- single_kernel(chain_state1, current_pdf1, iter, chain_grad1)
       chain_state1 <- res_single_kernel$chain_state
       current_pdf1 <- res_single_kernel$current_pdf
+      chain_grad1 <- res_single_kernel$chain_grad
       chain_state2 <- chain_state1
       current_pdf2 <- current_pdf1
+      chain_grad2 <- chain_grad1
 
       # accumulate mcmc estimator
       if (k <= iter && iter <= m){
         mcmcestimator <- mcmcestimator + h(chain_state1)
+        samples <- rbind(samples,chain_state1)
+        gradients <- rbind(gradients,chain_grad1)
+        fun_evals <- rbind(fun_evals,h(chain_state1))
+        weights <- c(weights,1 / (m - k + 1))
+        mcmc_ind <- c(mcmc_ind,TRUE)
+        chain <- c(chain,"x")
       }
 
     } else {
       # use coupled kernel
-      res_coupled_kernel <- coupled_kernel(chain_state1, chain_state2, current_pdf1, current_pdf2, iter)
+      res_coupled_kernel <- coupled_kernel(chain_state1, chain_state2, current_pdf1, current_pdf2, iter, chain_grad1, chain_grad2)
       chain_state1 <- res_coupled_kernel$chain_state1
       current_pdf1 <- res_coupled_kernel$current_pdf1
+      chain_grad1 <- res_coupled_kernel$chain_grad1
       chain_state2 <- res_coupled_kernel$chain_state2
       current_pdf2 <- res_coupled_kernel$current_pdf2
+      chain_grad2 <- res_coupled_kernel$chain_grad2
 
       # check if meeting happens
       if (all(chain_state1 == chain_state2) && !meet){
@@ -238,10 +299,32 @@ unbiased_estimator <- function(logtarget, single_kernel, coupled_kernel, rinit, 
         # accumulate mcmc estimator
         if (iter <= m){
           mcmcestimator <- mcmcestimator + h(chain_state1)
+          samples <- rbind(samples,chain_state1)
+          gradients <- rbind(gradients,chain_grad1)
+          fun_evals <- rbind(fun_evals,h(chain_state1))
+          weights <- c(weights,1 / (m - k + 1))
+          mcmc_ind <- c(mcmc_ind,TRUE)
+          chain <- c(chain,"x")
         }
 
         # accumulate correction term
         correction <- correction + min(1, (iter-1 - k + 1)/(m - k + 1) ) * ( h(chain_state1) - h(chain_state2) )
+        if (iter<=m){
+          weights[length(weights)] <- weights[length(weights)] + min(1, (iter-1 - k + 1)/(m - k + 1) )
+        } else{
+          samples <- rbind(samples,chain_state1)
+          gradients <- rbind(gradients,chain_grad1)
+          fun_evals <- rbind(fun_evals,h(chain_state1))
+          weights <- c(weights,min(1, (iter-1 - k + 1)/(m - k + 1) ))
+          mcmc_ind <- c(mcmc_ind,FALSE)
+          chain <- c(chain,"x")
+        }
+        samples <- rbind(samples,chain_state2)
+        gradients <- rbind(gradients,chain_grad2)
+        fun_evals <- rbind(fun_evals,h(chain_state2))
+        weights <- c(weights, - min(1, (iter-1 - k + 1)/(m - k + 1) ))
+        mcmc_ind <- c(mcmc_ind,FALSE)
+        chain <- c(chain,"y")
       }
 
     }
@@ -256,6 +339,10 @@ unbiased_estimator <- function(logtarget, single_kernel, coupled_kernel, rinit, 
   mcmcestimator <- mcmcestimator / (m - k + 1)
   uestimator <- mcmcestimator + correction
 
+  # mcmcestimator_reproduced <- colMeans(matrix(fun_evals[mcmc_ind,],nrow=sum(mcmc_ind)))
+  # uestimator_reproduced <- t(weights%*%fun_evals)
+
   return(list(mcmcestimator = mcmcestimator, correction = correction, uestimator = uestimator,
+              samples = samples, gradients = gradients, y = fun_evals, weights = weights, chain = chain, mcmc_ind = mcmc_ind,
               meetingtime = meetingtime, iteration = iter, finished = finished))
 }

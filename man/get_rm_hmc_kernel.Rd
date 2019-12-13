@@ -4,7 +4,8 @@
 \alias{get_rm_hmc_kernel}
 \title{Get Riemann manifold Hamiltonian Monte Carlo kernels}
 \usage{
-get_rm_hmc_kernel(logtarget, gradlogtarget, stepsize, nsteps, dimension, metric)
+get_rm_hmc_kernel(logtarget, gradlogtarget, stepsize, nsteps, dimension,
+  metric)
 }
 \arguments{
 \item{logtarget}{function to compute target log-density, e.g. see \code{\link{get_mvnormal}}}

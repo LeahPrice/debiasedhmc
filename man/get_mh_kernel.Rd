@@ -4,7 +4,7 @@
 \alias{get_mh_kernel}
 \title{Get random walk Metropolis-Hastings kernels}
 \usage{
-get_mh_kernel(logtarget, Sigma_proposal, dimension)
+get_mh_kernel(logtarget, Sigma_proposal, dimension, gradlogtarget = NULL)
 }
 \arguments{
 \item{logtarget}{function to compute target log-density, e.g. see \code{\link{get_mvnormal}}}
@@ -12,6 +12,8 @@ get_mh_kernel(logtarget, Sigma_proposal, dimension)
 \item{Sigma_proposal}{variance of the Normal random walk for the proposals}
 
 \item{dimension}{dimension of the target distribution}
+
+\item{gradlogtarget}{function to compute gradient of target log-density, e.g. see \code{\link{get_mvnormal}}}
 }
 \value{
 A list containing the keys
