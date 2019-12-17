@@ -196,6 +196,10 @@ unbiased_estimator <- function(logtarget, single_kernel, coupled_kernel, rinit, 
 
   # mcmcestimator computes the sum of h(X_t) for t=k,...,m
   mcmcestimator <- h(chain_state1)
+  samples0 <- chain_state1
+  gradients0 <- chain_grad1
+  fun_evals0 <- mcmcestimator
+
   samples <- NULL
   gradients <- NULL
   fun_evals <- NULL
@@ -344,5 +348,6 @@ unbiased_estimator <- function(logtarget, single_kernel, coupled_kernel, rinit, 
 
   return(list(mcmcestimator = mcmcestimator, correction = correction, uestimator = uestimator,
               samples = samples, gradients = gradients, y = fun_evals, weights = weights, chain = chain, mcmc_ind = mcmc_ind,
+              samples0 = samples0, gradients0 = gradients0, y0 = fun_evals0,
               meetingtime = meetingtime, iteration = iter, finished = finished))
 }
